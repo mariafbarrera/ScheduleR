@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mari</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.5.16/dist/vue.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+</head>
+<body>
+<div id="app">
+    <!-- Navbar -->
+    <nav class="navbar is-primary" role="navigation" aria-label="main navigation">
+        <div class="navbar-brand">
+            <a class="navbar-item" href="#">
+                <img src="https://via.placeholder.com/40" alt="Logo">
+                mari site
+            </a>
+        </div>
+    </nav>
+
+    <div class="mt-4 search-wrapper">
+        <h1>Buscador Desplegable</h1>
+        <div class="search-container">
+            <input type="text" v-model="filter" @input="searchResults" @keydown.down="down"
+                   @keydown.up="up" @keydown.enter="selectResult" placeholder="Search...">
+            <ul v-show="showDropdown" class="dropdownn">
+                <li v-for="(result, index) in results" :key="result.id"
+                    :class="{ active: index === selectedResult }" @click="selectResult(result)">
+
+                    {{ result.name }}
+                </li>
+            </ul>
+        </div>
+        <!--<p class="hidden" v-if="selected">Selected: {{ selected.name }}</p>-->
+    </div>
+
+    <!-- Tarjetas Material UI con icono de agendar -->
+    <div class="container mt-4" v-if="selected">
+        <div class="columns is-centered">
+            <div class="column is-half">
+                <div class="card" v-for="(cl, index) in classes" :key="cl.class">
+                    <header class="card-header">
+                        <p class="card-header-title">
+                            {{cl.class}}
+                        </p>
+                        <a href="#" class="card-header-icon" aria-label="more options" @click="confirmAndSendRequest">
+                            <span class="icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </span>
+                        </a>
+                    </header>
+                    <div class="card-content">
+                        <div class="content">
+                            <b>Instructor {{cl.instructor}}</b>
+                            <b>Instruction Mode {{cl.instruction_mode}}</b>
+                            <div v-if="Object.keys(summaries).length > 0">
+                                <h3>summary</h3>
+                                <p>{{summaries[cl.instructor]}}</p>
+                                <h3>Rating avg</h3>
+                                <p>{{rating.find(item => cl.instructor.replace(/\s/g, '') in item)[cl.instructor.replace(/\s/g, '')]}}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agrega más tarjetas aquí según sea necesario -->
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    .search-wrapper {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 200px; /* Agregamos un margen inferior */
+    }
+
+    .search-container {
+        position: relative;
+        display: inline-block;
+    }
+
+    .dropdownn {
+        position: absolute;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        border: 1px solid #ccc;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+
+    .dropdownn li {
+        padding: 8px;
+        cursor: pointer;
+    }
+
+    .dropdownn li.active {
+        background-color: #f2f2f2;
+    }
+</style>
+<script>
+    new Vue({
+        el: '#app',
+        data: {
+            filter: '',
+            showDropdown: false,
+            results: [],
+            selected: null,
+            selectedResult: -1,
+            classes: [],
+            summaries: {},
+            rating: [],
+            colleges: {
+                "HTR01": "Hunter College",
+                "BKL01": "brooklyn college",
+                "QNS01": "Queens College",
+            },
+            currentCollege: null
+        },
+        methods: {
+            searchResults() {
+                const endpoint = `http://localhost:5000/search-courses?query=${this.filter}`;
+
+                fetch(endpoint)
+                    .then(response => response.json())
+                    .then(data => {
+                        this.results = data;
+                    })
+                    .catch(error => {
+                        console.error('error fetch results:', error);
+                    });
+                this.results.filter(result =>
+                    result.name.toLowerCase().includes(this.filter.toLowerCase())
+                );
+
+                this.showDropdown = this.results.length > 0;
+                this.selectedResult = -1;
+            },
+            down() {
+                if (this.selectedResult < this.results.length - 1) {
+                    this.selectedResult++;
+                }
+            },
+            up() {
+                if (this.selectedResult > 0) {
+                    this.selectedResult--;
+                }
+            },
+            selectResult() {
+                if (this.selectedResult !== -1) {
+                    this.selected = this.results[this.selectedResult];
+                    this.filter = this.selected.name;
+                    this.showDropdown = false;
+                    this.classes = this.selected.details;
+                }
+            },
+            selectResult(result) {
+                this.selected = result;
+                this.filter = result.name;
+                this.showDropdown = false;
+                this.classes = result.details;
+                this.currentCollege = result.college
+                this.get_summaries(result.details.map(r => r.instructor))
+            },
+            get_summaries(professors) {
+                const requestOptions = {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        professors: professors,
+                        school: this.colleges[this.currentCollege]
+                    })
+                };
+
+                fetch('http://localhost:5000/get_summary', requestOptions)
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(data); // Aquí puedes manejar la respuesta JSON
+                        this.summaries = data.summaries
+                        this.rating = data.rating
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+            },
+            confirmAndSendRequest() {
+                const email = window.prompt('Email :');
+
+                if (email !== null && email.trim() !== '') {
+
+                    const requestData = {
+                        college: this.colleges[this.currentCollege],
+                        email: email,
+                        course_name: this.selected.name,
+                        class_id: this.selected.details.class,
+                    };
+
+                    fetch('http://localhost:5000/create-schedule', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestData)
+                    })
+                        .then(response => {
+                            if (response.ok) {
+                                alert('OK ');
+                            } else {
+                                alert('Internal server error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                        });
+                } else {
+                    alert('No email provided');
+                }
+            },
+        },
+    });
+</script>
+</body>
+</html>
